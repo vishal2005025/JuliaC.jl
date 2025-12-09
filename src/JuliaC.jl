@@ -28,6 +28,7 @@ Base.@kwdef mutable struct ImageRecipe
     c_sources::Vector{String} = String[]
     cflags::Vector{String} = String[]
     extra_objects::Vector{String} = String[]
+    export_abi::Union{String, Nothing} = nothing
 end
 
 Base.@kwdef mutable struct LinkRecipe
@@ -77,13 +78,19 @@ function _print_usage(io::IO=stdout)
     println(io, "  --privatize                 Privatize bundled libjulia (Unix)")
     println(io, "  --trim[=mode]               Strip IR/metadata (e.g. --trim=safe)")
     println(io, "  --compile-ccallable         Export ccallable entrypoints")
+    println(io, "  --export-abi <file>         Emit type / function information for the ABI (in JSON format)")
     println(io, "  --experimental              Forwarded to Julia (needed for --trim)")
     println(io, "  --verbose                   Print commands and timings")
+    println(io, "  --version                   Print juliac and julia version")
     println(io, "  -h, --help                  Show this help")
     println(io)
     println(io, "Examples:")
     println(io, "  juliac --output-exe app ./MyApp.jl --bundle build --trim=safe")
     println(io, "  juliac --output-lib build/libmylib --project ./MyLib.jl src/libentry.jl")
+end
+
+function _print_version(io::IO=stdout)
+    println(io, "juliac version $(pkgversion(JuliaC)), julia version $(VERSION)")
 end
 
 # CLI app entrypoint for Pkg apps
@@ -116,6 +123,10 @@ function _parse_cli_args(args::Vector{String})
             push!(image_recipe.julia_args, arg)
         elseif arg == "--compile-ccallable"
             image_recipe.add_ccallables = true
+        elseif arg == "--export-abi"
+            i == length(args) && error("--export-abi requires an argument")
+            image_recipe.export_abi = args[i+1]
+            i += 1
         elseif startswith(arg, "--project")
             if occursin('=', arg)
                 proj = split(arg, '='; limit=2)[2]
@@ -165,6 +176,9 @@ end
 function _main_cli(args::Vector{String}; io::IO=stdout)
     if isempty(args) || any(a -> a == "-h" || a == "--help", args)
         _print_usage(io)
+        return
+    elseif "--version" in args
+        _print_version(io)
         return
     end
     img, link, bun = _parse_cli_args(args)
